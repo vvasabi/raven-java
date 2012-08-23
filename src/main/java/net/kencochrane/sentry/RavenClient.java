@@ -1,5 +1,7 @@
 package net.kencochrane.sentry;
 
+import net.kencochrane.sentry.spi.RavenPlugin;
+
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
@@ -10,6 +12,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.*;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ServiceLoader;
 
 import static org.apache.commons.codec.binary.Base64.encodeBase64String;
 
@@ -26,6 +32,7 @@ public class RavenClient {
     private String sentryDSN;
     private String lastID;
     private MessageSender messageSender;
+    private List<RavenPlugin> plugins;
 
     public RavenClient() {
         this.sentryDSN = System.getenv("SENTRY_DSN");
@@ -84,6 +91,14 @@ public class RavenClient {
         return lastID;
     }
 
+    public List<RavenPlugin> getPlugins() {
+        return plugins;
+    }
+
+    public void setPlugins(List<RavenPlugin> plugins) {
+        this.plugins = plugins;
+    }
+
     /**
      * Build up the JSON body for the POST that is sent to sentry
      *
@@ -94,7 +109,7 @@ public class RavenClient {
      * @param culprit     Who we think caused the problem.
      * @return JSON String of message body
      */
-    private String buildJSON(String message, String timestamp, String loggerClass, int logLevel, String culprit, Throwable exception) {
+    protected JSONObject buildJSON(String message, String timestamp, String loggerClass, int logLevel, String culprit, Throwable exception) {
         JSONObject obj = new JSONObject();
         String lastID = RavenUtils.getRandomUUID();
         obj.put("event_id", lastID); //Hexadecimal string representing a uuid4 value.
@@ -112,8 +127,19 @@ public class RavenClient {
         obj.put("level", logLevel);
         obj.put("logger", loggerClass);
         obj.put("server_name", RavenUtils.getHostname());
+        postProcessJSON(obj);
         setLastID(lastID);
-        return obj.toJSONString();
+        return obj;
+    }
+
+    private void postProcessJSON(JSONObject json) {
+        if (plugins == null) {
+            return;
+        }
+
+        for (RavenPlugin plugin : plugins) {
+            plugin.postProcessRequestJSON(json);
+        }
     }
 
     /**
@@ -204,7 +230,7 @@ public class RavenClient {
      */
     private String buildMessage(String message, String timestamp, String loggerClass, int logLevel, String culprit, Throwable exception) {
         // get the json version of the body
-        String jsonMessage = buildJSON(message, timestamp, loggerClass, logLevel, culprit, exception);
+        String jsonMessage = buildJSON(message, timestamp, loggerClass, logLevel, culprit, exception).toJSONString();
 
         // compress and encode the json message.
         return buildMessageBody(jsonMessage);

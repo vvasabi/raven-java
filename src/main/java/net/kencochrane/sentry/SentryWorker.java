@@ -1,8 +1,14 @@
 package net.kencochrane.sentry;
 
+import net.kencochrane.sentry.spi.RavenPlugin;
+
 import org.apache.log4j.spi.LoggingEvent;
 import org.apache.log4j.spi.ThrowableInformation;
 
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ServiceLoader;
 import java.util.concurrent.BlockingQueue;
 
 /**
@@ -22,6 +28,18 @@ public class SentryWorker extends Thread
         this.shouldShutdown = false;
         this.queue = queue;
         this.client = new RavenClient(sentryDSN, proxy, naiveSsl);
+        this.client.setPlugins(loadPlugins());
+    }
+
+    private List<RavenPlugin> loadPlugins()
+    {
+        List<RavenPlugin> plugins = new ArrayList<RavenPlugin>();
+        Iterator<RavenPlugin> iterator = ServiceLoader.load(RavenPlugin.class).iterator();
+        while (iterator.hasNext())
+        {
+            plugins.add(iterator.next());
+        }
+        return plugins;
     }
 
     @Override
