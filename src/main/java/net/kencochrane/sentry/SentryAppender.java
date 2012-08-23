@@ -2,7 +2,6 @@ package net.kencochrane.sentry;
 
 import org.apache.log4j.AppenderSkeleton;
 import org.apache.log4j.spi.LoggingEvent;
-import org.apache.log4j.spi.ThrowableInformation;
 
 /**
  * User: ken cochrane

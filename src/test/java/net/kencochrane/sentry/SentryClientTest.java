@@ -2,7 +2,6 @@ package net.kencochrane.sentry;
 
 import mockit.Mocked;
 import mockit.Expectations;
-import mockit.Verifications;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
