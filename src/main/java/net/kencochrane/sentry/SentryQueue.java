@@ -1,7 +1,14 @@
 package net.kencochrane.sentry;
 
+import net.kencochrane.sentry.spi.Log;
+import net.kencochrane.sentry.spi.RavenPlugin;
+
 import org.apache.log4j.spi.LoggingEvent;
 
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ServiceLoader;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -12,10 +19,11 @@ import java.util.concurrent.LinkedBlockingQueue;
 public class SentryQueue
 {
     private static SentryQueue ourInstance = new SentryQueue();
-    private static BlockingQueue<LoggingEvent> queue;
+    private static BlockingQueue<Log> queue;
 
     private SentryWorker worker;
     private boolean blocking;
+    private List<RavenPlugin> plugins;
 
     public static SentryQueue getInstance()
     {
@@ -43,24 +51,42 @@ public class SentryQueue
 
     public synchronized void setup(String sentryDSN, String proxy, int queueSize, boolean blocking, boolean naiveSsl)
     {
-        queue = new LinkedBlockingQueue<LoggingEvent>(queueSize);
+        queue = new LinkedBlockingQueue<Log>(queueSize);
         this.blocking = blocking;
 
-        worker = new SentryWorker(queue, sentryDSN, proxy, naiveSsl);
+        plugins = loadPlugins();
+        worker = new SentryWorker(queue, sentryDSN, proxy, naiveSsl, plugins);
         worker.start();
+    }
+
+    private List<RavenPlugin> loadPlugins()
+    {
+        List<RavenPlugin> plugins = new ArrayList<RavenPlugin>();
+        Iterator<RavenPlugin> iterator = ServiceLoader.load(RavenPlugin.class).iterator();
+        while (iterator.hasNext())
+        {
+            plugins.add(iterator.next());
+        }
+        System.out.println("Raven plugins found: " + plugins);
+        return plugins;
     }
 
     public void addEvent(LoggingEvent le)
     {
         try
         {
+            Log log = new Log(le);
+            for (RavenPlugin plugin : plugins) {
+                plugin.preProcessLog(log);
+            }
+
             if(blocking)
             {
-                queue.put(le);
+                queue.put(log);
             }
             else
             {
-                queue.add(le);
+                queue.add(log);
             }
         }
         catch(IllegalStateException e)

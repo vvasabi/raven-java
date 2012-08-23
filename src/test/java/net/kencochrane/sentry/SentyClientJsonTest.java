@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+import net.kencochrane.sentry.spi.Log;
 import net.kencochrane.sentry.spi.RavenPlugin;
 
 import org.json.simple.JSONArray;
@@ -29,8 +30,12 @@ public class SentyClientJsonTest extends RavenClient {
         plugins.add(new RavenPlugin() {
 
             @Override
-            public void postProcessRequestJSON(JSONObject json) {
+            public void postProcessRequestJSON(Log log, JSONObject json) {
                 json.put("test", "123");
+            }
+
+            @Override
+            public void preProcessLog(Log log) {
             }
 
         });
@@ -39,7 +44,7 @@ public class SentyClientJsonTest extends RavenClient {
         String messageString = "Test";
         String timestamp = RavenUtils.getTimestampString(new Date().getTime());
         String logger = "sentry.test";
-        JSONObject result = buildJSON(messageString, timestamp, logger, 20, messageString, null);
+        JSONObject result = buildJSON(messageString, timestamp, logger, 20, messageString, null, new Log());
         assertEquals(result.get("test"), "123");
     }
 
@@ -47,7 +52,7 @@ public class SentyClientJsonTest extends RavenClient {
         String messageString = "Test";
         String timestamp = RavenUtils.getTimestampString(new Date().getTime());
         String logger = "sentry.test";
-        JSONObject result = buildJSON(messageString, timestamp, logger, 20, messageString, null);
+        JSONObject result = buildJSON(messageString, timestamp, logger, 20, messageString, null, new Log());
         assertTrue(result.containsKey("sentry.interfaces.Message"));
         JSONObject message = (JSONObject)result.get("sentry.interfaces.Message");
         assertEquals(message.get("message"), messageString);
@@ -61,7 +66,7 @@ public class SentyClientJsonTest extends RavenClient {
         String timestamp = RavenUtils.getTimestampString(new Date().getTime());
         String logger = "sentry.test";
         Throwable exception = new Exception("Test");
-        JSONObject result = buildJSON(messageString, timestamp, logger, 20, messageString, exception);
+        JSONObject result = buildJSON(messageString, timestamp, logger, 20, messageString, exception, null);
         assertFalse(result.containsKey("sentry.interfaces.Message"));
     }
 

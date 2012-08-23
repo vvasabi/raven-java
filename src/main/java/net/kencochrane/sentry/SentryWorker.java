@@ -1,14 +1,9 @@
 package net.kencochrane.sentry;
 
+import net.kencochrane.sentry.spi.Log;
 import net.kencochrane.sentry.spi.RavenPlugin;
 
-import org.apache.log4j.spi.LoggingEvent;
-import org.apache.log4j.spi.ThrowableInformation;
-
-import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
-import java.util.ServiceLoader;
 import java.util.concurrent.BlockingQueue;
 
 /**
@@ -21,25 +16,14 @@ public class SentryWorker extends Thread
 
     private RavenClient client;
 
-    private BlockingQueue<LoggingEvent> queue;
+    private BlockingQueue<Log> queue;
 
-    public SentryWorker(BlockingQueue<LoggingEvent> queue, String sentryDSN, String proxy, boolean naiveSsl)
+    public SentryWorker(BlockingQueue<Log> queue, String sentryDSN, String proxy, boolean naiveSsl, List<RavenPlugin> plugins)
     {
         this.shouldShutdown = false;
         this.queue = queue;
         this.client = new RavenClient(sentryDSN, proxy, naiveSsl);
-        this.client.setPlugins(loadPlugins());
-    }
-
-    private List<RavenPlugin> loadPlugins()
-    {
-        List<RavenPlugin> plugins = new ArrayList<RavenPlugin>();
-        Iterator<RavenPlugin> iterator = ServiceLoader.load(RavenPlugin.class).iterator();
-        while (iterator.hasNext())
-        {
-            plugins.add(iterator.next());
-        }
-        return plugins;
+        this.client.setPlugins(plugins);
     }
 
     @Override
@@ -49,9 +33,8 @@ public class SentryWorker extends Thread
         {
             try
             {
-                LoggingEvent le = queue.take();
-
-                sendToSentry(le);
+                Log log = queue.take();
+                sendToSentry(log);
             }
             catch (InterruptedException e)
             {
@@ -65,31 +48,14 @@ public class SentryWorker extends Thread
         shouldShutdown = true;
     }
 
-    public void sendToSentry(LoggingEvent loggingEvent)
+    public void sendToSentry(Log log)
     {
         synchronized (this)
         {
             try
             {
-                // get timestamp and timestamp in correct string format.
-                long timestamp = loggingEvent.getTimeStamp();
-
-                // get the log and info about the log.
-                String logMessage = loggingEvent.getRenderedMessage();
-                String loggingClass = loggingEvent.getLogger().getName();
-                int logLevel = (loggingEvent.getLevel().toInt() / 1000);  //Need to divide by 1000 to keep consistent with sentry
-                String culprit = loggingEvent.getLoggerName();
-
-                // is it an exception?
-                ThrowableInformation throwableInformation = loggingEvent.getThrowableInformation();
-
                 // send the message to the sentry server
-                if (throwableInformation == null){
-                    client.captureMessage(logMessage, timestamp, loggingClass, logLevel, culprit);
-                }else{
-                    client.captureException(logMessage, timestamp, loggingClass, logLevel, culprit, throwableInformation.getThrowable());
-                }
-
+                client.captureLog(log);
             } catch (Exception e)
             {
                 // Can we tell if there is another logger to send the event to?

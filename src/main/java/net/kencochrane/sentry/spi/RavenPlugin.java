@@ -4,6 +4,8 @@ import org.json.simple.JSONObject;
 
 public interface RavenPlugin {
 
-    void postProcessRequestJSON(JSONObject json);
+    void preProcessLog(Log log);
+
+    void postProcessRequestJSON(Log log, JSONObject json);
 
 }
