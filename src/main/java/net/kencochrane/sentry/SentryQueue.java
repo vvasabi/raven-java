@@ -1,6 +1,6 @@
 package net.kencochrane.sentry;
 
-import net.kencochrane.sentry.spi.Log;
+import net.kencochrane.sentry.spi.RavenEvent;
 import net.kencochrane.sentry.spi.RavenPlugin;
 
 import org.apache.log4j.spi.LoggingEvent;
@@ -19,7 +19,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 public class SentryQueue
 {
     private static SentryQueue ourInstance = new SentryQueue();
-    private static BlockingQueue<Log> queue;
+    private static BlockingQueue<RavenEvent> queue;
 
     private SentryWorker worker;
     private boolean blocking;
@@ -51,7 +51,7 @@ public class SentryQueue
 
     public synchronized void setup(String sentryDSN, String proxy, int queueSize, boolean blocking, boolean naiveSsl)
     {
-        queue = new LinkedBlockingQueue<Log>(queueSize);
+        queue = new LinkedBlockingQueue<RavenEvent>(queueSize);
         this.blocking = blocking;
 
         plugins = loadPlugins();
@@ -75,9 +75,9 @@ public class SentryQueue
     {
         try
         {
-            Log log = new Log(le);
+            RavenEvent log = new SimpleRavenEvent(le);
             for (RavenPlugin plugin : plugins) {
-                plugin.preProcessLog(log);
+                plugin.preProcessEvent(log);
             }
 
             if(blocking)

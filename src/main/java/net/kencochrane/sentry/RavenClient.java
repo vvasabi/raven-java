@@ -1,6 +1,6 @@
 package net.kencochrane.sentry;
 
-import net.kencochrane.sentry.spi.Log;
+import net.kencochrane.sentry.spi.RavenEvent;
 import net.kencochrane.sentry.spi.RavenPlugin;
 
 import org.json.simple.JSONArray;
@@ -100,42 +100,36 @@ public class RavenClient {
     /**
      * Build up the JSON body for the POST that is sent to sentry
      *
-     * @param message     The log message
-     * @param timestamp   ISO8601 formatted date string
-     * @param loggerClass The class associated with the log message
-     * @param logLevel    int value for Log level for message (DEBUG, ERROR, INFO, etc.)
-     * @param culprit     Who we think caused the problem.
+     * @param event log event
      * @return JSON message body
      */
-    protected JSONObject buildJSON(String message, String timestamp, String loggerClass, int logLevel, String culprit, Throwable exception, Log log) {
+    protected JSONObject buildJSON(RavenEvent event) {
         JSONObject obj = new JSONObject();
         String lastID = RavenUtils.getRandomUUID();
         obj.put("event_id", lastID); //Hexadecimal string representing a uuid4 value.
-        obj.put("checksum", RavenUtils.calculateChecksum(message));
-        if (exception == null) {
-            obj.put("culprit", culprit);
-            obj.put("sentry.interfaces.Message", buildSentryInterfacesMessage(message));
+        obj.put("checksum", RavenUtils.calculateChecksum(event.getMessage()));
+        if (event.getException() == null) {
+            obj.put("culprit", event.getLoggerName());
+            obj.put("sentry.interfaces.Message", buildSentryInterfacesMessage(event.getMessage()));
         } else {
-            obj.put("culprit", determineCulprit(exception));
-            obj.put("sentry.interfaces.Exception", buildException(exception));
-            obj.put("sentry.interfaces.Stacktrace", buildStacktrace(exception));
+            obj.put("culprit", determineCulprit(event.getException()));
+            obj.put("sentry.interfaces.Exception", buildException(event.getException()));
+            obj.put("sentry.interfaces.Stacktrace", buildStacktrace(event.getException()));
         }
-        obj.put("timestamp", timestamp);
-        obj.put("message", message);
+        obj.put("timestamp", RavenUtils.getTimestampString(event.getTimeStamp()));
+        obj.put("message", event.getMessage());
         obj.put("project", getConfig().getProjectId());
-        obj.put("level", logLevel);
-        obj.put("logger", loggerClass);
+        obj.put("level", event.getLogLevel());
+        obj.put("logger", event.getLoggerName());
         obj.put("server_name", RavenUtils.getHostname());
 
         // let plugin post process only when log is available
-        if (log != null) {
-            postProcessJSON(log, obj);
-        }
+        postProcessJSON(event, obj);
         setLastID(lastID);
         return obj;
     }
 
-    private void postProcessJSON(Log log, JSONObject json) {
+    private void postProcessJSON(RavenEvent log, JSONObject json) {
         if (plugins == null) {
             return;
         }
@@ -238,16 +232,19 @@ public class RavenClient {
      * Build up the JSON body and then Encode and compress it.
      *
      * @param message     The log message
-     * @param timestamp   ISO8601 formatted date string
+     * @param timeStamp   milliseconds since unix epoch
      * @param loggerClass The class associated with the log message
      * @param logLevel    int value for Log level for message (DEBUG, ERROR, INFO, etc.)
-     * @param culprit     Who we think caused the problem.
      * @param exception   exception causing the problem
      * @return Encode and compressed version of the JSON Message body
      */
-    private String buildMessage(String message, String timestamp, String loggerClass, int logLevel, String culprit, Throwable exception, Log log) {
+    private String buildMessage(String message, long timeStamp, String loggerClass, String culprit, int logLevel, Throwable exception) {
+        return buildMessage(new SimpleRavenEvent(timeStamp, message, loggerClass, culprit, logLevel, exception));
+    }
+    
+    private String buildMessage(RavenEvent event) {
         // get the json version of the body
-        String jsonMessage = buildJSON(message, timestamp, loggerClass, logLevel, culprit, exception, log).toJSONString();
+        String jsonMessage = buildJSON(event).toJSONString();
 
         // compress and encode the json message.
         return buildMessageBody(jsonMessage);
@@ -282,13 +279,13 @@ public class RavenClient {
      * @deprecated
      */
     public void logMessage(String theLogMessage, long timestamp, String loggerClass, int logLevel, String culprit, Throwable exception) {
-        String message = buildMessage(theLogMessage, RavenUtils.getTimestampString(timestamp), loggerClass, logLevel, culprit, exception, null);
+        String message = buildMessage(theLogMessage, timestamp, loggerClass, culprit, logLevel, exception);
         sendMessage(message, timestamp);
     }
 
-    public String captureLog(Log log) {
-        String body = buildMessage(log.getMessage(), RavenUtils.getTimestampString(log.getTimeStamp()), log.getLoggerName(), log.getLogLevel(), log.getLoggerName(), log.getException(), log);
-        sendMessage(body, log.getTimeStamp());
+    public String captureLog(RavenEvent event) {
+        String body = buildMessage(event);
+        sendMessage(body, event.getTimeStamp());
         return getLastID();
     }
 
@@ -303,7 +300,7 @@ public class RavenClient {
      * @return lastID       The ID for the last message.
      */
     public String captureMessage(String message, long timestamp, String loggerClass, int logLevel, String culprit) {
-        String body = buildMessage(message, RavenUtils.getTimestampString(timestamp), loggerClass, logLevel, culprit, null, null);
+        String body = buildMessage(message, timestamp, loggerClass, culprit, logLevel, null);
         sendMessage(body, timestamp);
         return getLastID();
     }
@@ -330,7 +327,7 @@ public class RavenClient {
      * @return lastID       The ID for the last message.
      */
     public String captureException(String message, long timestamp, String loggerClass, int logLevel, String culprit, Throwable exception) {
-        String body = buildMessage(message, RavenUtils.getTimestampString(timestamp), loggerClass, logLevel, culprit, exception, null);
+        String body = buildMessage(message, timestamp, loggerClass, culprit, logLevel, exception);
         sendMessage(body, timestamp);
         return getLastID();
     }

@@ -1,6 +1,6 @@
 package net.kencochrane.sentry;
 
-import net.kencochrane.sentry.spi.Log;
+import net.kencochrane.sentry.spi.RavenEvent;
 import net.kencochrane.sentry.spi.RavenPlugin;
 
 import java.util.List;
@@ -16,9 +16,9 @@ public class SentryWorker extends Thread
 
     private RavenClient client;
 
-    private BlockingQueue<Log> queue;
+    private BlockingQueue<RavenEvent> queue;
 
-    public SentryWorker(BlockingQueue<Log> queue, String sentryDSN, String proxy, boolean naiveSsl, List<RavenPlugin> plugins)
+    public SentryWorker(BlockingQueue<RavenEvent> queue, String sentryDSN, String proxy, boolean naiveSsl, List<RavenPlugin> plugins)
     {
         this.shouldShutdown = false;
         this.queue = queue;
@@ -33,8 +33,7 @@ public class SentryWorker extends Thread
         {
             try
             {
-                Log log = queue.take();
-                sendToSentry(log);
+                sendToSentry(queue.take());
             }
             catch (InterruptedException e)
             {
@@ -48,7 +47,7 @@ public class SentryWorker extends Thread
         shouldShutdown = true;
     }
 
-    public void sendToSentry(Log log)
+    public void sendToSentry(RavenEvent log)
     {
         synchronized (this)
         {
